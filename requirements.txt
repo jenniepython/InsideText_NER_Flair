@@ -1,6 +1,6 @@
 streamlit>=1.28.0,<2.0.0
 flair==0.13.1
-torch==2.0.1
+torch>=2.5.0
 PyYAML>=5.4
 streamlit-authenticator==0.2.2
 regex
