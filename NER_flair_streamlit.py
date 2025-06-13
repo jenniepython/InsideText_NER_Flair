@@ -148,7 +148,7 @@ class EntityLinker:
     def _load_spacy_model(self):
         """Load spaCy model with error handling and automatic download."""
         from flair.data import Sentence
-from flair.models import SequenceTagger
+        from flair.models import SequenceTagger
         
         # Try to load models in order of preference
         models_to_try = ['en_core_web_sm', 'en_core_web_md', 'en_core_web_lg']
