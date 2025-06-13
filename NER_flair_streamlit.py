@@ -14,7 +14,7 @@ import streamlit as st
 
 # Configure Streamlit page FIRST - before any other Streamlit commands
 st.set_page_config(
-    page_title="From Text to Linked Data using spaCy",
+    page_title="From Text to Linked Data using Flair",
     layout="centered",  
     initial_sidebar_state="collapsed" 
 )
