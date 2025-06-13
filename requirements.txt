@@ -6,3 +6,4 @@ streamlit-authenticator==0.2.2
 regex
 requests
 wikipedia
+plotly>=5.0.0
