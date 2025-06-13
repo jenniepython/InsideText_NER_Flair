@@ -1,2 +1,2 @@
 InsideText_NER
-Named Entity Recognition with spaCy
+Named Entity Recognition with Flair
