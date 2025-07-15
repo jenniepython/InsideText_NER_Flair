@@ -7,7 +7,7 @@ This application provides an easy-to-use interface for entity extraction,
 linking, and visualization.
 
 Author: Based on entity_linker.py
-Version: 1.0 - Updated to use spaCy instead of NLTK
+Version: 1.0 - Updated to use Flair instead of NLTK
 """
 
 import streamlit as st
@@ -131,71 +131,54 @@ class EntityLinker:
     """
     
     def __init__(self):
-        """Initialize the EntityLinker and load required spaCy model."""
-        self.nlp = self._load_spacy_model()
+        """Initialize the EntityLinker and load required Flair model."""
+        self.tagger = self._load_flair_model()
         
         # Color scheme for different entity types in HTML output
         self.colors = {
-            'PERSON': '#BF7B69',          # F&B Red earth        
-            'ORG': '#9fd2cd',             # F&B Blue ground
-            'GPE': '#C4C3A2',             # F&B Cooking apple green
-            'LOC': '#EFCA89',             # F&B Yellow ground. 
-            'FAC': '#C3B5AC',             # F&B Elephants breath
-            'GSP': '#C4A998',             # F&B Dead salmon
-            'ADDRESS': '#CCBEAA'          # F&B Oxford stone
+            'PER': '#BF7B69',          # F&B Red earth        
+            'ORG': '#9fd2cd',          # F&B Blue ground
+            'LOC': '#C4C3A2',          # F&B Cooking apple green
+            'MISC': '#EFCA89',         # F&B Yellow ground. 
+            'FAC': '#C3B5AC',          # F&B Elephants breath
+            'GSP': '#C4A998',          # F&B Dead salmon
+            'ADDRESS': '#CCBEAA'       # F&B Oxford stone
         }
     
-    def _load_spacy_model(self):
-        """Load spaCy model with error handling and automatic download."""
-        from flair.data import Sentence
-        from flair.models import SequenceTagger
-        
-        # Try to load models in order of preference
-        models_to_try = ['en_core_web_sm', 'en_core_web_md', 'en_core_web_lg']
-        
-        for model_name in models_to_try:
-            try:
-                tagger = SequenceTagger.load('ner')
-                st.success(f"Loaded spaCy model: {model_name}")
-                return nlp
-            except OSError:
-                continue
-        
-        # If no model is available, try to download en_core_web_sm
-        st.info("No spaCy model found. Attempting to download en_core_web_sm...")
+    def _load_flair_model(self):
+        """Load Flair NER model with error handling."""
         try:
-            import subprocess
-            import sys
+            from flair.models import SequenceTagger
             
-            # Download the model
-            subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
-            
-            # Try to load it
+            # Load the standard NER model from Flair
             tagger = SequenceTagger.load('ner')
-            st.success("Successfully downloaded and loaded en_core_web_sm")
-            return nlp
-            
+            st.success(f"Loaded Flair NER model")
+            return tagger
         except Exception as e:
-            st.error(f"Failed to download spaCy model: {e}")
-            st.error("Please install a spaCy English model manually:")
-            st.code("python -m spacy download en_core_web_sm")
+            st.error(f"Failed to load Flair NER model: {e}")
+            st.error("Please ensure Flair is installed properly.")
+            st.code("pip install flair")
             st.stop()
 
     def extract_entities(self, text: str):
-        """Extract named entities from text using spaCy with proper validation."""
-        # Process text with spaCy
-        doc = self.nlp(text)
+        """Extract named entities from text using Flair with proper validation."""
+        from flair.data import Sentence
+        
+        # Process text with Flair
+        sentence = Sentence(text)
+        self.tagger.predict(sentence)
         
         entities = []
         
-        # Step 1: Extract traditional named entities with validation
+        # Step 1: Extract named entities with validation
         for ent in sentence.get_spans('ner'):
-            # Filter out unwanted entity types at the spaCy label level
-            if ent.get_label('ner').value in ['DATE', 'TIME', 'PERCENT', 'MONEY', 'QUANTITY', 'ORDINAL', 'CARDINAL']:
+            # Filter out unwanted entity types
+            tag = ent.get_label('ner').value
+            if tag in ['DATE', 'TIME', 'PERCENT', 'MONEY', 'QUANTITY', 'ORDINAL', 'CARDINAL']:
                 continue
             
-            # Map spaCy entity types to our format
-            entity_type = self._map_spacy_entity_type(ent.get_label('ner').value)
+            # Map Flair entity types to our format
+            entity_type = self._map_flair_entity_type(tag)
             
             # Additional filter in case mapping returns an unwanted type
             if entity_type in ['DATE', 'TIME', 'PERCENT', 'MONEY', 'QUANTITY', 'ORDINAL', 'CARDINAL']:
@@ -208,7 +191,7 @@ class EntityLinker:
                     'type': entity_type,
                     'start': ent.start_position,
                     'end': ent.end_position,
-                    'label': ent.get_label('ner').value  # Keep original spaCy label for reference
+                    'label': tag  # Keep original Flair label for reference
                 })
         
         # Step 2: Extract addresses
@@ -220,21 +203,35 @@ class EntityLinker:
         
         return entities
 
-    def _map_spacy_entity_type(self, spacy_label: str) -> str:
-        """Map spaCy entity labels to our standardized types."""
+    def _map_flair_entity_type(self, flair_label: str) -> str:
+        """Map Flair entity labels to our standardized types."""
+        # Flair's standard model uses CoNLL03 tags: PER, LOC, ORG, MISC
         mapping = {
-            'PERSON': 'PERSON',
+            'PER': 'PERSON',
             'ORG': 'ORGANIZATION',
-            'GPE': 'GPE',  # Geopolitical entity
             'LOC': 'LOCATION',
-            'FAC': 'FACILITY',
-            'NORP': 'GPE',  # Nationalities or religious or political groups -> GPE
-            'EVENT': 'LOCATION',  # Events often have location relevance
-            'WORK_OF_ART': 'ORGANIZATION',  # Often associated with organizations
-            'LAW': 'ORGANIZATION',  # Laws often associated with organizations
-            'LANGUAGE': 'GPE'  # Languages associated with places
+            'MISC': 'MISC',
+            # Additional mappings for other Flair models
+            'B-PER': 'PERSON',
+            'I-PER': 'PERSON',
+            'B-ORG': 'ORGANIZATION',
+            'I-ORG': 'ORGANIZATION',
+            'B-LOC': 'LOCATION',
+            'I-LOC': 'LOCATION',
+            'B-MISC': 'MISC',
+            'I-MISC': 'MISC',
+            # OntoNotes model mappings if using that model
+            'PERSON': 'PERSON',
+            'ORGANIZATION': 'ORGANIZATION',
+            'GPE': 'LOCATION', 
+            'LOCATION': 'LOCATION',
+            'FACILITY': 'LOCATION',
+            'PRODUCT': 'MISC',
+            'EVENT': 'MISC',
+            'WORK_OF_ART': 'MISC',
+            'LANGUAGE': 'MISC'
         }
-        return mapping.get(spacy_label, spacy_label)
+        return mapping.get(flair_label, flair_label)
 
     def link_to_britannica(self, entities):
         """Add basic Britannica linking.""" 
@@ -340,7 +337,7 @@ class EntityLinker:
         
         # Extract from entities that are already identified as places
         for entity in entities:
-            if entity['type'] in ['GPE', 'LOCATION']:
+            if entity['type'] in ['LOCATION', 'GPE', 'FACILITY']:
                 entity_lower = entity['text'].lower()
                 # Add major locations found in entities
                 for location, patterns in major_locations.items():
@@ -398,7 +395,7 @@ class EntityLinker:
         if context_clues:
             print(f"Detected geographical context: {', '.join(context_clues)}")
         
-        place_types = ['GPE', 'LOCATION', 'FACILITY', 'ORGANIZATION', 'ADDRESS']
+        place_types = ['LOCATION', 'GPE', 'FACILITY', 'ORGANIZATION', 'ADDRESS']
         
         for entity in entities:
             if entity['type'] in place_types:
@@ -621,127 +618,24 @@ class EntityLinker:
         
         return False
 
-    def _is_valid_entity(self, entity_text: str, entity_type: str, spacy_ent) -> bool:
-        """Validate an entity using spaCy's linguistic features."""
+    def _is_valid_entity(self, entity_text: str, entity_type: str, flair_span) -> bool:
+        """Validate an entity from Flair."""
         # Skip very short entities
         if len(entity_text.strip()) <= 1:
             return False
         
-        # Use spaCy's built-in confidence and linguistic features
-        doc = spacy_ent.doc
+        # For Flair, we'll use simpler validation since we don't have access to 
+        # the same linguistic features as spaCy
         
-        # Get the token(s) for this entity
-        entity_tokens = [token for token in doc[spacy_ent.start:spacy_ent.end]]
-        
-        if not entity_tokens:
-            return True  # Default to valid if we can't analyze
-        
-        first_token = entity_tokens[0]
-        
-        # Filter out words functioning as verbs or adjectives primarily
-        if first_token.pos_ in ['VERB', 'AUX'] or (first_token.pos_ == 'ADJ' and entity_type == 'PERSON'):
-            return False
-        
-        # Special handling for sentence-start words (capitalization bias)
-        if self._is_sentence_start_spacy(first_token):
-            return self._validate_sentence_start_entity_spacy(
-                first_token, entity_type, entity_tokens
-            )
-        
-        # Additional validation for specific entity types
+        # Simple validation based on entity text
         if entity_type == 'PERSON':
-            return self._validate_person_entity_spacy(entity_tokens)
-        
-        if entity_type in ['GPE', 'LOCATION', 'FACILITY']:
-            return self._validate_place_entity_spacy(entity_tokens)
-        
-        # Prefer proper nouns as they're more likely to be real entities
-        if first_token.pos_ == 'PROPN':
-            return True
-        
-        return True
-
-    def _is_sentence_start_spacy(self, token) -> bool:
-        """Check if a token is at the beginning of a sentence using spaCy."""
-        # Check if this is the first token or follows sentence-ending punctuation
-        if token.i == 0:
-            return True
-        
-        # Look back for sentence boundaries
-        for i in range(token.i - 1, -1, -1):
-            prev_token = token.doc[i]
-            if prev_token.is_sent_start or prev_token.text in ['.', '!', '?']:
+            # Check if it looks like a person name (capitalized words)
+            words = entity_text.split()
+            if all(word[0].isupper() for word in words if word.isalpha()):
                 return True
-            elif prev_token.is_alpha:  # Found a word before any punctuation
-                return False
-        
-        return True
-
-    def _validate_sentence_start_entity_spacy(self, token, entity_type: str, entity_tokens) -> bool:
-        """Validate entities that appear at sentence start using spaCy features."""
-        # Check the token's lemma and POS to see if it would naturally be a verb/adjective
-        if token.pos_ in ['VERB', 'AUX', 'ADJ'] and token.lemma_.lower() != token.text.lower():
             return False
-        
-        # Check dependency relationships
-        if token.dep_ in ['ROOT'] and token.pos_ == 'VERB':
-            return False
-        
-        # For multi-token entities, check if the pattern suggests non-entity usage
-        if len(entity_tokens) > 1:
-            # Check if followed by tokens that suggest adjectival usage
-            next_token_idx = entity_tokens[-1].i + 1
-            if next_token_idx < len(token.doc):
-                next_token = token.doc[next_token_idx]
-                if next_token.pos_ in ['NOUN'] and entity_type == 'PERSON':
-                    return False
-        
-        return True
-
-    def _validate_person_entity_spacy(self, entity_tokens) -> bool:
-        """Additional validation for PERSON entities using spaCy."""
-        if not entity_tokens:
-            return True
-        
-        first_token = entity_tokens[0]
-        
-        # Check if followed by plural nouns (suggesting adjectival usage)
-        next_token_idx = entity_tokens[-1].i + 1
-        if next_token_idx < len(first_token.doc):
-            next_token = first_token.doc[next_token_idx]
-            if next_token.pos_ == 'NOUN' and next_token.tag_ in ['NNS', 'NNPS']:
-                return False
-        
-        # Check previous token context
-        if first_token.i > 0:
-            prev_token = first_token.doc[first_token.i - 1]
             
-            # If preceded by modal verbs or auxiliaries, likely not a person
-            if prev_token.pos_ in ['AUX'] or prev_token.tag_ in ['MD']:
-                return False
-            
-            # If preceded by determiners and not proper noun, less likely to be person
-            if prev_token.pos_ == 'DET' and first_token.pos_ != 'PROPN':
-                return False
-        
-        return True
-
-    def _validate_place_entity_spacy(self, entity_tokens) -> bool:
-        """Additional validation for place entities using spaCy."""
-        if not entity_tokens:
-            return True
-        
-        first_token = entity_tokens[0]
-        
-        # Check for adjectival usage (e.g., "March weather")
-        next_token_idx = entity_tokens[-1].i + 1
-        if next_token_idx < len(first_token.doc):
-            next_token = first_token.doc[next_token_idx]
-            
-            # If followed by noun and not proper noun, likely adjectival
-            if next_token.pos_ == 'NOUN' and first_token.pos_ != 'PROPN':
-                return False
-        
+        # For other types, we'll trust Flair's prediction
         return True
 
     def _extract_addresses(self, text: str):
@@ -1000,7 +894,7 @@ class StreamlitEntityLinker:
                 </div>
                 <div style="margin: 10px 0;">⬇️</div>
                 <div style="background-color: #9fd2cd; padding: 10px; border-radius: 5px; display: inline-block; margin: 5px;">
-                     <strong>spaCy Entity Recognition</strong>
+                     <strong>Flair Entity Recognition</strong>
                 </div>
                 <div style="margin: 10px 0;">⬇️</div>
                 <div style="text-align: center;">
@@ -1146,7 +1040,7 @@ class StreamlitEntityLinker:
                 status_text.text("Getting coordinates...")
                 progress_bar.progress(85)
                 # Geocode all place entities more aggressively
-                place_entities = [e for e in entities if e['type'] in ['GPE', 'LOCATION', 'FACILITY', 'ORGANIZATION']]
+                place_entities = [e for e in entities if e['type'] in ['LOCATION', 'GPE', 'FACILITY', 'ORGANIZATION']]
                 
                 if place_entities:
                     try:
@@ -1212,12 +1106,13 @@ class StreamlitEntityLinker:
         # Start with escaped text
         highlighted = html_module.escape(text)
         
-        # Color scheme (updated for spaCy entity types)
+        # Color scheme (updated for Flair entity types)
         colors = {
             'PERSON': '#BF7B69',          # F&B Red earth        
             'ORGANIZATION': '#9fd2cd',    # F&B Blue ground
-            'GPE': '#C4C3A2',             # F&B Cooking apple green
             'LOCATION': '#EFCA89',        # F&B Yellow ground 
+            'MISC': '#C4C3A2',            # F&B Cooking apple green
+            'GPE': '#C4C3A2',             # F&B Cooking apple green
             'FACILITY': '#C3B5AC',        # F&B Elephants breath
             'GSP': '#C4A998',             # F&B Dead salmon
             'ADDRESS': '#CCBEAA'          # F&B Oxford stone
