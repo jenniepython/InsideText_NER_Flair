@@ -722,16 +722,16 @@ class EntityLinker:
     
     def _remove_overlapping_and_duplicate_entities(self, entities):
         """
-        Enhanced method that removes both overlapping and duplicate entities.
-        This replaces the old _remove_overlapping_entities method.
+        Enhanced method that removes overlapping entities and exact positional duplicates.
+        Preserves multiple instances of the same entity at different positions.
         """
         if not entities:
             return entities
         
-        # Step 1: Remove exact duplicates first
-        entities = self._remove_duplicate_entities(entities)
+        # Step 1: Remove exact positional duplicates (same text, same start/end position)
+        entities = self._remove_exact_positional_duplicates(entities)
         
-        # Step 2: Handle overlapping entities
+        # Step 2: Handle overlapping entities (keep longer ones)
         entities.sort(key=lambda x: x['start'])
         
         filtered = []
@@ -752,27 +752,40 @@ class EntityLinker:
             if not overlaps:
                 filtered.append(entity)
         
-        # Step 3: Final check for any remaining duplicates that might have been missed
-        # (e.g., similar entities that don't overlap positionally but are semantically identical)
-        final_filtered = []
-        seen_entities = set()
+        return filtered
+    
+    def _remove_exact_positional_duplicates(self, entities):
+        """Remove entities that are identical in text, type, and position."""
+        seen = set()
+        deduplicated = []
         
-        for entity in filtered:
-            # More sophisticated duplicate detection
-            entity_key = entity['text'].lower().strip()
+        for entity in entities:
+            # Create a key based on text, type, and position
+            key = (entity['text'].lower().strip(), entity['type'], entity['start'], entity['end'])
             
-            # Check for similar entities (same text, different positions)
-            is_duplicate = False
-            for seen_key in seen_entities:
-                if entity_key == seen_key:
-                    is_duplicate = True
-                    break
-            
-            if not is_duplicate:
-                seen_entities.add(entity_key)
-                final_filtered.append(entity)
+            if key not in seen:
+                seen.add(key)
+                deduplicated.append(entity)
         
-        return final_filtered
+        return deduplicated
+
+    def render_statistics(self, entities: List[Dict[str, Any]]):
+        """Render statistics about the extracted entities."""
+        # Get unique entities for accurate statistics
+        unique_entities = self._get_unique_entities_for_table(entities)
+        
+        # Create columns for metrics (works well on mobile)
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric("Total Entities", len(entities))
+            st.metric("Unique Entities", len(unique_entities))
+        
+        with col2:
+            geocoded_count = len([e for e in unique_entities if e.get('latitude')])
+            st.metric("Geocoded Places", geocoded_count)
+            linked_count = len([e for e in unique_entities if e.get('wikidata_url') or e.get('wikipedia_url') or e.get('britannica_url')])
+            st.metric("Linked Entities", linked_count)
 
     def link_to_wikidata(self, entities):
         """Add basic Wikidata linking."""
@@ -1273,6 +1286,9 @@ class StreamlitEntityLinker:
         entities = st.session_state.entities
         
         st.header("Results")
+        
+        # Add statistics display
+        self.render_statistics(entities)
         
         # Highlighted text
         st.subheader("Highlighted Text")
