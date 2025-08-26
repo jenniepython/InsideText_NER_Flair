@@ -148,11 +148,16 @@ class EntityLinker:
     def _load_flair_model(self):
         """Load Flair NER model with error handling."""
         try:
+            # Show loading message immediately
+            loading_placeholder = st.empty()
+            loading_placeholder.info("Loading Flair NER model... This may take a minute on first run.")
+            
             from flair.models import SequenceTagger
             
             # Load the standard NER model from Flair
             tagger = SequenceTagger.load('ner')
-            st.success(f"Loaded Flair NER model")
+            
+            loading_placeholder.success(f"Loaded Flair NER model successfully")
             return tagger
         except Exception as e:
             st.error(f"Failed to load Flair NER model: {e}")
