@@ -199,7 +199,8 @@ class EntityLinker:
         entities.extend(addresses)
         
         # Step 3: Remove overlapping entities
-        entities = self._remove_overlapping_entities(entities)
+        # entities = self._remove_overlapping_entities(entities)
+        entities = self._remove_overlapping_and_duplicate_entities(entities)
         
         return entities
 
@@ -660,29 +661,98 @@ class EntityLinker:
         
         return addresses
 
-    def _remove_overlapping_entities(self, entities):
-        """Remove overlapping entities, keeping the longest ones."""
-        entities.sort(key=lambda x: x['start'])
+def _remove_overlapping_entities(self, entities):
+    """Remove overlapping entities, keeping the longest ones."""
+    entities.sort(key=lambda x: x['start'])
+    
+    filtered = []
+    for entity in entities:
+        overlaps = False
+        for existing in filtered[:]:  # Create a copy to safely modify during iteration
+            # Check if entities overlap
+            if (entity['start'] < existing['end'] and entity['end'] > existing['start']):
+                # If current entity is longer, remove the existing one
+                if len(entity['text']) > len(existing['text']):
+                    filtered.remove(existing)
+                    break
+                else:
+                    # Current entity is shorter, skip it
+                    overlaps = True
+                    break
         
-        filtered = []
-        for entity in entities:
-            overlaps = False
-            for existing in filtered[:]:  # Create a copy to safely modify during iteration
-                # Check if entities overlap
-                if (entity['start'] < existing['end'] and entity['end'] > existing['start']):
-                    # If current entity is longer, remove the existing one
-                    if len(entity['text']) > len(existing['text']):
-                        filtered.remove(existing)
-                        break
-                    else:
-                        # Current entity is shorter, skip it
-                        overlaps = True
-                        break
-            
-            if not overlaps:
-                filtered.append(entity)
+        if not overlaps:
+            filtered.append(entity)
+    
+    return filtered
+
+def _remove_duplicate_entities(self, entities):
+    """Remove exact duplicate entities based on text and type."""
+    seen = set()
+    deduplicated = []
+    
+    for entity in entities:
+        # Create a key based on text and type (case-insensitive for text)
+        key = (entity['text'].lower().strip(), entity['type'])
         
-        return filtered
+        if key not in seen:
+            seen.add(key)
+            deduplicated.append(entity)
+    
+    return deduplicated
+
+def _remove_overlapping_and_duplicate_entities(self, entities):
+    """
+    Enhanced method that removes both overlapping and duplicate entities.
+    This replaces the old _remove_overlapping_entities method.
+    """
+    if not entities:
+        return entities
+    
+    # Step 1: Remove exact duplicates first
+    entities = self._remove_duplicate_entities(entities)
+    
+    # Step 2: Handle overlapping entities
+    entities.sort(key=lambda x: x['start'])
+    
+    filtered = []
+    for entity in entities:
+        overlaps = False
+        for existing in filtered[:]:  # Create a copy to safely modify during iteration
+            # Check if entities overlap in position
+            if (entity['start'] < existing['end'] and entity['end'] > existing['start']):
+                # If current entity is longer, remove the existing one
+                if len(entity['text']) > len(existing['text']):
+                    filtered.remove(existing)
+                    break
+                else:
+                    # Current entity is shorter, skip it
+                    overlaps = True
+                    break
+        
+        if not overlaps:
+            filtered.append(entity)
+    
+    # Step 3: Final check for any remaining duplicates that might have been missed
+    # (e.g., similar entities that don't overlap positionally but are semantically identical)
+    final_filtered = []
+    seen_entities = set()
+    
+    for entity in filtered:
+        # More sophisticated duplicate detection
+        entity_key = entity['text'].lower().strip()
+        
+        # Check for similar entities (same text, different positions)
+        is_duplicate = False
+        for seen_key in seen_entities:
+            if entity_key == seen_key:
+                is_duplicate = True
+                break
+        
+        if not is_duplicate:
+            seen_entities.add(entity_key)
+            final_filtered.append(entity)
+    
+    return final_filtered
 
     def link_to_wikidata(self, entities):
         """Add basic Wikidata linking."""
